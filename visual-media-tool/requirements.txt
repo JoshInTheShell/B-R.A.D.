@@ -1,0 +1,6 @@
+streamlit>=1.35
+requests>=2.31
+python-dotenv>=1.0
+pytest>=8.0
+# Optional: opentimelineio  (uncomment if you want OTIO support)
+# opentimelineio>=0.16
