@@ -92,7 +92,7 @@ with tab1:
                 st.write("**Actions/Emotions**")
                 st.write(", ".join(analysis.actions[:8] + analysis.emotions[:4]) or "—")
 
-            queries = st.tags(label="Queries", text=[q for q in build_queries(analysis)], maxtags=50)
+           AttributeError: module 'streamlit' has no attribute 'tags'
             st.session_state["vmt_queries"] = queries
             st.session_state["vmt_text"] = text
 
