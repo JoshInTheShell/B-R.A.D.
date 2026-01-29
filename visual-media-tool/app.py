@@ -92,7 +92,7 @@ with tab1:
                 st.write("**Actions/Emotions**")
                 st.write(", ".join(analysis.actions[:8] + analysis.emotions[:4]) or "—")
 
-            queries = st.multiselect("Queries",build_queries(analyisis),default=build_queries(analyisis))
+            queries = st.multiselect("Queries",build_queries(analysis),default=build_queries(analysis))
             st.session_state["vmt_queries"] = queries
             st.session_state["vmt_text"] = text
 
