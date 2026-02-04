@@ -26,6 +26,23 @@ with st.expander("Provider API Keys (from environment)", expanded=False):
         f"UNSPLASH_ACCESS_KEY={os.getenv('UNSPLASH_ACCESS_KEY', '')}",
     ]), language="bash")
 
+def get_search_url(source, media_type):
+    if source == "pixabay":
+        return (
+            "https://pixabay.com/api/videos/"
+            if media_type == "video"
+            else "https://pixabay.com/api/"
+        )
+
+    if source == "pexels":
+        return (
+            "https://api.pexels.com/videos/search"
+            if media_type == "video"
+            else "https://api.pexels.com/v1/search"
+        )
+
+    raise ValueError("Unsupported source")
+
 # Sidebar controls
 with st.sidebar:
     st.header("Settings")
@@ -36,6 +53,12 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("Exports")
     export_base = st.text_input("Export base filename", value="vmt_session")
+    media_type = st.radio(
+    "Media type",
+    ["Photo", "Video"],
+    horizontal=True
+)
+    media_type = media_type.lower()  # "photo" or "video"
 
 # Input
 tab1, tab2, tab3 = st.tabs(["Paste / Upload", "Batch Mode", "Load Session"])
