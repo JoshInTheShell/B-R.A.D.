@@ -181,6 +181,7 @@ if "vmt_queries" in st.session_state and st.session_state["vmt_queries"]:
         if not valid_results:
             st.warning("No valid results after errors.")
             continue
+            
         cols = st.columns(4)
         for i, r in enumerate(valid_results):
             c = cols[i % 4]
