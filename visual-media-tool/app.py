@@ -21,28 +21,41 @@ st.caption("Analyze a script/transcript → build queries → fetch stock media 
 with st.expander("Provider API Keys (from environment)", expanded=False):
     st.write("Pexels:`PEXELS_API_KEY`, Pixabay:`PIXABAY_API_KEY`, Unsplash:`UNSPLASH_ACCESS_KEY`")
     st.code("\n".join([
-        f"PEXELS_API_KEY={os.getenv('PEXELS_API_KEY', '')}",
-        f"PIXABAY_API_KEY={os.getenv('PIXABAY_API_KEY', '')}",
-        f"UNSPLASH_ACCESS_KEY={os.getenv('UNSPLASH_ACCESS_KEY', '')}",
+        f"PEXELS_API_KEY={os.getenv('PEXELS_API_KEY', '(not set)')}",
+        f"PIXABAY_API_KEY={os.getenv('PIXABAY_API_KEY', '(not set)')}",
+        f"UNSPLASH_ACCESS_KEY={os.getenv('UNSPLASH_ACCESS_KEY', '(not set)')}",
     ]), language="bash")
 
 
 # Sidebar controls
 with st.sidebar:
     st.header("Settings")
-    enable_pexels = st.checkbox("Enable Pexels", True)
-    enable_pixabay = st.checkbox("Enable Pixabay", True)
-    enable_unsplash = st.checkbox("Enable Unsplash", True)
+    
+    # Media type selection
+    media_type = st.radio(
+        "Media type",
+        ["Photo", "Video"],
+        horizontal=True,
+        help="Choose whether to search for photos or videos"
+    )
+    media_type = media_type.lower()  # "photo" or "video"
+    
+    st.markdown("---")
+    
+    # Provider toggles
+    enable_pexels = st.checkbox("Enable Pexels", True, help="Supports both photos and videos")
+    enable_pixabay = st.checkbox("Enable Pixabay", True, help="Supports both photos and videos")
+    enable_unsplash = st.checkbox("Enable Unsplash", True, help="Photos only (no video API)")
+    
+    # Show warning if Unsplash is enabled for video
+    if media_type == "video" and enable_unsplash:
+        st.warning("⚠️ Unsplash doesn't support videos, it will be skipped")
+    
     per_query = st.slider("Results per provider", 4, 30, 12, 1)
+    
     st.markdown("---")
     st.subheader("Exports")
     export_base = st.text_input("Export base filename", value="vmt_session")
-    media_type = st.radio(
-    "Media type",
-    ["Photo", "Video"],
-    horizontal=True
-)
-    media_type = media_type.lower()  # "photo" or "video"
 
 # Input
 tab1, tab2, tab3 = st.tabs(["Paste / Upload", "Batch Mode", "Load Session"])
@@ -135,7 +148,7 @@ with tab3:
 # Search
 if "vmt_queries" in st.session_state and st.session_state["vmt_queries"]:
     st.markdown("---")
-    st.header("Search & Pick")
+    st.header(f"Search & Pick ({media_type.title()}s)")
 
     settings = Settings.from_env()
     searcher = MediaSearcher(settings, enabled={
@@ -145,49 +158,140 @@ if "vmt_queries" in st.session_state and st.session_state["vmt_queries"]:
     })
 
     queries: List[str] = st.session_state["vmt_queries"]
-    chosen: Dict[str, Dict] = {}
+    chosen: Dict[str, Dict] = st.session_state.get("vmt_chosen", {})
 
     for q in queries:
         st.subheader(q)
-        results = searcher.search_all(q, limit=per_query)
+                
+        # Pass media_type to the search
+        results = searcher.search_all(q, limit=per_query, media_type=media_type)
+        
         if not results:
-            st.info("No results or providers disabled.")
+            st.info("No results found or all providers disabled.")
+            continue
+        
+        # Filter out error results for display
+        valid_results = [r for r in results if not r.extra.get("error")]
+        error_results = [r for r in results if r.extra.get("error")]
+        
+        if error_results:
+            for err in error_results:
+                st.error(f"❌ {err.title}")
+        
+        if not valid_results:
+            st.warning("No valid results after errors.")
             continue
         cols = st.columns(4)
-        for i, r in enumerate(results):
+        for i, r in enumerate(valid_results):
             c = cols[i % 4]
             with c:
+                 # Display thumbnail
                 if r.thumb:
                     st.image(r.thumb, use_container_width=True)
-                st.caption(f"{r.title}\n\n[{r.provider}] • {r.author or '—'}")
-                st.link_button("Open", r.url, use_container_width=True)
+                else:
+                    st.info("No preview available")
+                
+                # Show title and metadata
+                caption_parts = [f"**{r.title[:50]}**"]
+                caption_parts.append(f"[{r.provider}]")
+                if r.author:
+                    caption_parts.append(f"by {r.author}")
+                if r.duration:
+                    mins = r.duration // 60
+                    secs = r.duration % 60
+                    caption_parts.append(f"⏱️ {mins}:{secs:02d}")
+                
+                st.caption(" • ".join(caption_parts))
+                
+                # Action buttons
+                st.link_button("View", r.url, use_container_width=True)
+                
                 if st.button("Select", key=f"sel-{q}-{i}", use_container_width=True):
                     chosen[q] = {
                         "query": q,
-                        "title": r.title, "provider": r.provider,
-                        "url": r.url, "thumb": r.thumb,
-                        "author": r.author, "license": r.license,
+                        "title": r.title,
+                        "provider": r.provider,
+                        "url": r.url,
+                        "thumb": r.thumb,
+                        "author": r.author,
+                        "license": r.license,
+                        "media_type": r.media_type,
+                        "duration": r.duration,
+                        "video_files": r.video_files if r.media_type == "video" else None,
+                        "extra": r.extra
                     }
+                    st.session_state["vmt_chosen"] = chosen
+                    st.success(f"✅ Selected for '{q}'")
+                    st.rerun()
+        
+        # Show currently selected item if any
+        if q in chosen:
+            st.success(f"✅ Currently selected: **{chosen[q]['title']}** from {chosen[q]['provider']}")
+        
         st.write("")  # spacing
 
     st.markdown("---")
     st.subheader("Export")
+        
+    # Show summary of selections
+    if chosen:
+        st.info(f"📌 {len(chosen)} items selected out of {len(queries)} queries")
+    
+        
+    # Show summary of selections
+    if chosen:
+        st.info(f"📌 {len(chosen)} items selected out of {len(queries)} queries")
+    
     colA, colB, colC, colD = st.columns(4)
+    
     session = {
         "text": st.session_state.get("vmt_text", ""),
         "queries": queries,
         "selected": chosen,
+        "media_type": media_type
     }
+    
     sess_json = json.dumps(session, ensure_ascii=False, indent=2)
-    b64 = base64.b64encode(sess_json.encode()).decode()
-    colA.download_button("⬇️ Save Session (.vmt.json)", data=sess_json, file_name=f"{export_base}.vmt.json")
+    
+    colA.download_button(
+        "⬇️ Save Session (.vmt.json)",
+        data=sess_json,
+        file_name=f"{export_base}.vmt.json",
+        mime="application/json"
+    )
 
     rows = [dict(query=q, **v) for q,v in chosen.items()]
-    csv_path = Path(f"{export_base}.csv").as_posix()
-    json_path = Path(f"{export_base}.json").as_posix()
-    colB.download_button("⬇️ Cue Sheet CSV", data="".encode("utf-8"), file_name=csv_path)
-    colC.download_button("⬇️ Results JSON", data=json.dumps(rows, ensure_ascii=False, indent=2), file_name=json_path)
-    # Shotlist reuses CSV exporter
-    colD.download_button("⬇️ Shotlist CSV", data="".encode("utf-8"), file_name=f"{export_base}.shotlist.csv")
+    csv_data = ""
+    if rows:
+        import csv
+        from io import StringIO
+        output = StringIO()
+        fields = sorted({k for r in rows for k in r.keys()})
+        writer = csv.DictWriter(output, fieldnames=fields)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow(r)
+        csv_data = output.getvalue()
+    
+    colB.download_button(
+        "⬇️ Cue Sheet CSV",
+        data=csv_data,
+        file_name=f"{export_base}.csv",
+        mime="text/csv"
+    )
+    
+    colC.download_button(
+        "⬇️ Results JSON",
+        data=json.dumps(rows, ensure_ascii=False, indent=2),
+        file_name=f"{export_base}.json",
+        mime="application/json"
+    )
+    
+    colD.download_button(
+        "⬇️ Shotlist CSV",
+        data=csv_data,
+        file_name=f"{export_base}.shotlist.csv",
+        mime="text/csv"
+    )
 else:
-    st.info("Start by analyzing text to generate queries.")
+    st.info("👈 Start by analyzing text in the tabs above to generate queries.")
