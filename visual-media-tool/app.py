@@ -28,7 +28,7 @@ st.title("🎬 Visual Media Tool")
 st.caption("Analyze a script/transcript → build queries → fetch stock media → export cue sheets.")
 
 with st.expander("Provider API Keys (from environment)", expanded=False):
-        st.write("**Stock Media Providers:**")
+    st.write("**Stock Media Providers:**")
     st.write("Pexels:`PEXELS_API_KEY`, Pixabay:`PIXABAY_API_KEY`, Unsplash:`UNSPLASH_ACCESS_KEY`")
     st.code("\n".join([
         f"PEXELS_API_KEY={os.getenv('PEXELS_API_KEY', '(not set)')}",
