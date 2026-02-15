@@ -6,10 +6,19 @@ from dataclasses import asdict
 import streamlit as st
 from dotenv import load_dotenv
 
-from src.vmt.analyzer import analyze_text, build_queries
+from src.vmt.analyzer import analyze_text as analyze_text_basic, build_queries
 from src.vmt.search import MediaSearcher
 from src.vmt.exporters import export_csv, export_json, export_shotlist
 from src.vmt.config import Settings
+
+# Try to import Gemini analyzer
+try:
+    from src.vmt.analyzer_gemini import analyze_text_with_gemini, test_gemini_connection
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    analyze_text_with_gemini = None
+    test_gemini_connection = None
 
 load_dotenv()
 
@@ -19,17 +28,48 @@ st.title("🎬 Visual Media Tool")
 st.caption("Analyze a script/transcript → build queries → fetch stock media → export cue sheets.")
 
 with st.expander("Provider API Keys (from environment)", expanded=False):
+        st.write("**Stock Media Providers:**")
     st.write("Pexels:`PEXELS_API_KEY`, Pixabay:`PIXABAY_API_KEY`, Unsplash:`UNSPLASH_ACCESS_KEY`")
     st.code("\n".join([
         f"PEXELS_API_KEY={os.getenv('PEXELS_API_KEY', '(not set)')}",
         f"PIXABAY_API_KEY={os.getenv('PIXABAY_API_KEY', '(not set)')}",
         f"UNSPLASH_ACCESS_KEY={os.getenv('UNSPLASH_ACCESS_KEY', '(not set)')}",
     ]), language="bash")
+    
+    st.write("**AI Analysis (Optional):**")
+    st.write("Google Gemini:`GOOGLE_API_KEY` - Get free key at https://makersuite.google.com/app/apikey")
+    gemini_key = os.getenv('GOOGLE_API_KEY', '(not set)')
+    st.code(f"GOOGLE_API_KEY={gemini_key}", language="bash")
+    
+    if GEMINI_AVAILABLE and gemini_key != '(not set)':
+        if test_gemini_connection():
+            st.success("✅ Gemini AI connected and working!")
+        else:
+            st.error("❌ Gemini API key set but connection failed")
 
 
 # Sidebar controls
 with st.sidebar:
     st.header("Settings")
+
+        # AI Analysis toggle
+    st.subheader("🤖 AI Analysis")
+    use_ai = False
+    if GEMINI_AVAILABLE and os.getenv('GOOGLE_API_KEY'):
+        use_ai = st.checkbox(
+            "Use Gemini AI for analysis",
+            value=True,
+            help="Uses Google Gemini for better keyword extraction (free tier: 15/min, 1500/day)"
+        )
+        if use_ai:
+            st.info("💡 AI will generate better, more visual search terms")
+    elif GEMINI_AVAILABLE:
+        st.warning("⚠️ Add GOOGLE_API_KEY to .env to enable AI")
+        st.caption("[Get free key](https://makersuite.google.com/app/apikey)")
+    else:
+        st.warning("⚠️ Install google-generativeai to enable AI")
+    
+    st.markdown("---")
     
     # Media type selection
     media_type = st.radio(
@@ -98,8 +138,17 @@ with tab1:
                 except Exception as e:
                     st.error(str(e))
 
-            analysis = analyze_text(text)
-            st.success("Analyzed! Edit the auto-built queries below or add your own.")
+            # Choose analyzer based on AI toggle
+            with st.spinner("Analyzing script..." if not use_ai else "🤖 AI analyzing script..."):
+                if use_ai and GEMINI_AVAILABLE and os.getenv('GOOGLE_API_KEY'):
+                    try:
+                        analysis = analyze_text_with_gemini(text)
+                        st.success("✅ AI Analysis complete! Edit the auto-built queries below or add your own.")
+                    except Exception as e:
+                        st.warning(f"AI analysis failed ({str(e)}), falling back to basic analysis")
+                        analysis = analyze_text_basic(text)
+                else:
+                    analysis = analyze_text_basic(text)
 
             key_cols = st.columns(3)
             with key_cols[0]:
@@ -122,9 +171,17 @@ with tab2:
     if st.button("Analyze Batch"):
         blocks = [b.strip() for b in batch_text.splitlines() if b.strip()]
         all_queries = []
-        for b in blocks:
-            a = analyze_text(b)
-            all_queries.extend(build_queries(a, limit=6))
+        
+        with st.spinner(f"Analyzing {len(blocks)} blocks..."):
+            for b in blocks:
+                if use_ai and GEMINI_AVAILABLE and os.getenv('GOOGLE_API_KEY'):
+                    try:
+                        a = analyze_text_with_gemini(b)
+                    except Exception:
+                        a = analyze_text_basic(b)
+                else:
+                    a = analyze_text_basic(b)
+                all_queries.extend(build_queries(a, limit=6))
         # de-dup keep order
         seen = set(); dedup = []
         for q in all_queries:
@@ -162,7 +219,7 @@ if "vmt_queries" in st.session_state and st.session_state["vmt_queries"]:
 
     for q in queries:
         st.subheader(q)
-                
+        
         # Pass media_type to the search
         results = searcher.search_all(q, limit=per_query, media_type=media_type)
         
@@ -209,6 +266,7 @@ if "vmt_queries" in st.session_state and st.session_state["vmt_queries"]:
                 
                 if st.button("Select", key=f"sel-{q}-{i}", use_container_width=True):
                     chosen[q] = {
+                        # Store the selected item
                         "query": q,
                         "title": r.title,
                         "provider": r.provider,
@@ -233,12 +291,7 @@ if "vmt_queries" in st.session_state and st.session_state["vmt_queries"]:
 
     st.markdown("---")
     st.subheader("Export")
-        
-    # Show summary of selections
-    if chosen:
-        st.info(f"📌 {len(chosen)} items selected out of {len(queries)} queries")
     
-        
     # Show summary of selections
     if chosen:
         st.info(f"📌 {len(chosen)} items selected out of {len(queries)} queries")
