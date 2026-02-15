@@ -107,19 +107,36 @@ def analyze_text(text: str) -> Analysis:
     return Analysis(keywords=kws, entities=ents, actions=acts, emotions=emos)
 
 def build_queries(analysis: Analysis, limit: int = 12) -> List[str]:
-    # Mix top keywords, entities, actions, emotions into compact queries
-    top_terms = [k for k,_ in analysis.keywords[:8]]
+    """
+    Build search queries from analysis results.
+    Smart enough to handle both basic RAKE output and AI-generated keywords.
+    """
+    top_terms = [k for k,_ in analysis.keywords[:15]]
     combos = []
+    
     def add(q): 
-        if q and q not in combos: combos.append(q)
-    for k in top_terms:
+        # Only add if it's a reasonable length (2-6 words) and not already added
+        word_count = len(q.split())
+        if q and q not in combos and 1 <= word_count <= 6:
+            combos.append(q)
+    
+    # Add top keywords directly (AI often gives great 2-3 word phrases)
+    for k in top_terms[:limit]:
         add(k)
+            
+    # Add entities as-is (usually good search terms)
     for e in analysis.entities[:4]:
         add(e)
-    for a in analysis.actions[:4]:
-        for k in top_terms[:4]:
-            add(f"{a} {k}")
-    for emo in analysis.emotions[:2]:
-        for k in top_terms[:4]:
-            add(f"{emo} {k}")
+    
+    # Only combine if we don't have enough queries yet
+    # This prevents over-combining when AI already gave good phrases
+    if len(combos) < limit:
+        # Combine actions with short keywords (1-2 words only)
+        short_terms = [k for k in top_terms[:6] if len(k.split()) <= 2]
+        for a in analysis.actions[:3]:
+            for k in short_terms[:3]:
+                if len(combos) >= limit:
+                    break
+                add(f"{a} {k}")
+    
     return combos[:limit]
