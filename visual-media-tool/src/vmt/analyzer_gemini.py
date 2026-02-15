@@ -50,19 +50,26 @@ Script:
 {text}
 
 Extract and provide:
-1. **Visual Keywords**: 15 concrete, searchable terms (things that can be photographed/filmed)
+1. **Visual Keywords**: 15 SHORT, searchable terms (1-3 words each, max 4 words)
    - Focus on: objects, locations, scenes, activities, visual elements
-   - Avoid: abstract concepts, emotions without visual representation
-   - Examples: "sunset", "city street", "coffee cup", "running person"
+   - Keep it SIMPLE and SEARCHABLE
+   - Examples: "sunset beach", "professional kitchen", "chef cooking", "city street"
+   - NOT: "adds fresh herbs golden sunset light streams through large windows"
 
-2. **Named Entities**: People names, place names, specific objects mentioned
-   - Examples: "New York", "Golden Gate Bridge", "iPhone"
+2. **Named Entities**: Specific names only (max 5)
+   - Examples: "New York", "Golden Gate Bridge"
 
-3. **Actions/Verbs**: Things happening that can be shown visually
-   - Examples: "running", "typing", "cooking", "driving"
+3. **Actions/Verbs**: Single action words or short phrases (max 5)
+   - Examples: "cooking", "running", "typing"
 
-4. **Emotional Tones**: Mood keywords useful for stock footage search
-   - Examples: "happy", "dramatic", "peaceful", "energetic"
+4. **Emotional Tones**: Mood keywords (max 3)
+   - Examples: "happy", "dramatic", "peaceful"
+
+RULES:
+- Each keyword must be 1-4 words maximum
+- Use simple, common search terms
+- Think like stock footage search queries
+- Be specific but concise
 
 Respond ONLY with valid JSON in this exact format (no markdown, no explanation):
 {{
@@ -72,7 +79,7 @@ Respond ONLY with valid JSON in this exact format (no markdown, no explanation):
   "emotions": ["emotion1", "emotion2"]
 }}
 
-Be specific and visual. Each term should be something you could type into a stock footage search."""
+Remember: SHORT keywords that work in stock footage searches!"""
 
     try:
         # Generate response
