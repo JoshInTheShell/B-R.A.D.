@@ -117,6 +117,18 @@ def read_uploaded_text(upload) -> str:
 
 with tab1:
     st.subheader("Paste text or upload a file")
+        
+    # Add a clear button
+    if "vmt_queries" in st.session_state:
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            if st.button("🗑️ Clear Results", help="Clear previous analysis"):
+                st.session_state.pop("vmt_queries", None)
+                st.session_state.pop("vmt_text", None)
+                st.session_state.pop("vmt_analyzer", None)
+                st.session_state.pop("vmt_chosen", None)
+                st.rerun()
+    
     text = st.text_area("Script / Transcript", height=240, placeholder="Paste your scene or transcript here...")
     up = st.file_uploader("Upload .txt / .md / .docx (optional)", type=["txt","md","docx","srt"])    
     if up is not None and not text.strip():
@@ -139,6 +151,7 @@ with tab1:
                     st.error(str(e))
 
             # Choose analyzer based on AI toggle
+            analyzer_used = "basic"
             with st.spinner("Analyzing script..." if not use_ai else "🤖 AI analyzing script..."):
                 if use_ai and GEMINI_AVAILABLE and os.getenv('GOOGLE_API_KEY'):
                     try:
@@ -147,8 +160,13 @@ with tab1:
                     except Exception as e:
                         st.warning(f"AI analysis failed ({str(e)}), falling back to basic analysis")
                         analysis = analyze_text_basic(text)
+                        analyzer_used = "basic (AI failed)"
+
                 else:
                     analysis = analyze_text_basic(text)
+                                        analyzer_used = "basic"
+            
+            st.info(f"🔍 Analyzer used: **{analyzer_used}**")
 
             key_cols = st.columns(3)
             with key_cols[0]:
@@ -164,6 +182,7 @@ with tab1:
             queries = st.multiselect("Queries",build_queries(analysis),default=build_queries(analysis))
             st.session_state["vmt_queries"] = queries
             st.session_state["vmt_text"] = text
+                        st.session_state["vmt_analyzer"] = analyzer_used
 
 with tab2:
     st.subheader("Batch Mode (one block per line)")
@@ -205,6 +224,14 @@ with tab3:
 # Search
 if "vmt_queries" in st.session_state and st.session_state["vmt_queries"]:
     st.markdown("---")
+    
+    # Show which analyzer was used for these results
+    analyzer_info = st.session_state.get("vmt_analyzer", "unknown")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.header(f"Search & Pick ({media_type.title()}s)")
+    with col2:
+        st.caption(f"Analyzed with: **{analyzer_info}**")
     st.header(f"Search & Pick ({media_type.title()}s)")
 
     settings = Settings.from_env()
