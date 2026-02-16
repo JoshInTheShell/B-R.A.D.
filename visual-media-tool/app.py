@@ -182,7 +182,7 @@ with tab1:
             queries = st.multiselect("Queries",build_queries(analysis),default=build_queries(analysis))
             st.session_state["vmt_queries"] = queries
             st.session_state["vmt_text"] = text
-                        st.session_state["vmt_analyzer"] = analyzer_used
+            st.session_state["vmt_analyzer"] = analyzer_used
 
 with tab2:
     st.subheader("Batch Mode (one block per line)")
