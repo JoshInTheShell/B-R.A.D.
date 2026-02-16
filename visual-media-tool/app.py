@@ -164,7 +164,7 @@ with tab1:
 
                 else:
                     analysis = analyze_text_basic(text)
-                                        analyzer_used = "basic"
+                    analyzer_used = "basic"
             
             st.info(f"🔍 Analyzer used: **{analyzer_used}**")
 
