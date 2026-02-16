@@ -43,43 +43,39 @@ def analyze_text_with_gemini(text: str) -> Analysis:
     # Use Gemini 1.5 Flash (fastest, free tier)
     model = genai.GenerativeModel('gemini-1.5-flash')
     
-    # Craft the prompt
-    prompt = f"""You are analyzing a script to find stock footage. Extract visual search terms.
+    # Craft the prompt with clear examples
+    prompt = f"""You are a stock footage search expert. Extract SHORT search terms.
 
-Script:
+INPUT SCRIPT:
 {text}
 
-Extract and provide:
-1. **Visual Keywords**: 15 SHORT, searchable terms (1-3 words each, max 4 words)
-   - Focus on: objects, locations, scenes, activities, visual elements
-   - Keep it SIMPLE and SEARCHABLE
-   - Examples: "sunset beach", "professional kitchen", "chef cooking", "city street"
-   - NOT: "adds fresh herbs golden sunset light streams through large windows"
+TASK: Generate search keywords for stock footage websites.
 
-2. **Named Entities**: Specific names only (max 5)
-   - Examples: "New York", "Golden Gate Bridge"
+RULES (CRITICAL):
+1. Each keyword = 1 to 3 words ONLY
+2. Think: "What would I type into Pexels/Shutterstock search?"
+3. NO long phrases
+4. Simple, descriptive terms
 
-3. **Actions/Verbs**: Single action words or short phrases (max 5)
-   - Examples: "cooking", "running", "typing"
+EXAMPLE INPUT:
+"A doctor examines a patient in a bright hospital room."
 
-4. **Emotional Tones**: Mood keywords (max 3)
-   - Examples: "happy", "dramatic", "peaceful"
-
-RULES:
-- Each keyword must be 1-4 words maximum
-- Use simple, common search terms
-- Think like stock footage search queries
-- Be specific but concise
-
-Respond ONLY with valid JSON in this exact format (no markdown, no explanation):
+EXAMPLE OUTPUT:
 {{
-  "keywords": ["keyword1", "keyword2", "keyword3"],
-  "entities": ["Entity1", "Entity2"],
-  "actions": ["action1", "action2"],
-  "emotions": ["emotion1", "emotion2"]
+  "keywords": ["doctor examining", "hospital room", "medical checkup", "bright hospital", "patient care", "healthcare worker", "clinical examination", "medical professional", "hospital interior", "doctor patient"],
+  "entities": ["hospital"],
+  "actions": ["examining", "checking"],
+  "emotions": ["professional", "caring"]
 }}
 
-Remember: SHORT keywords that work in stock footage searches!"""
+NOW YOUR TURN - Extract keywords from the script above.
+Output ONLY valid JSON (no extra text):
+{{
+  "keywords": [...],
+  "entities": [...],
+  "actions": [...],
+  "emotions": [...]
+}}"""
 
     try:
         # Generate response
@@ -100,14 +96,71 @@ Remember: SHORT keywords that work in stock footage searches!"""
         # Parse JSON
         data = json.loads(response_text)
         
-        # Convert to Analysis format
-        # Keywords need to be tuples of (keyword, score)
-        keywords: List[Tuple[str, float]] = [
-            (k, 1.0) for k in data.get("keywords", [])
+        # Post-process keywords to enforce quality standards
+        def clean_keywords(raw_keywords: List[str]) -> List[Tuple[str, float]]:
+            """Clean up AI-generated keywords to be short and searchable"""
+            cleaned = []
+            seen = set()
+            
+            for keyword in raw_keywords:
+                # Remove quotes and extra whitespace
+                keyword = keyword.strip().strip('"').strip("'")
+                
+                # Skip if empty
+                if not keyword:
+                    continue
+                
+                # Count words
+                words = keyword.split()
+                word_count = len(words)
+                
+                # If too long (>4 words), try to extract useful phrases
+                if word_count > 4:
+                    # Try to find noun phrases at the end (more likely to be useful)
+                    # Take last 2-3 words if they seem like a good phrase
+                    if word_count >= 3:
+                        # Try last 3 words
+                        short_phrase = " ".join(words[-3:])
+                        if short_phrase.lower() not in seen:
+                            cleaned.append((short_phrase, 1.0))
+                            seen.add(short_phrase.lower())
+                        # Try last 2 words
+                        short_phrase = " ".join(words[-2:])
+                        if short_phrase.lower() not in seen:
+                            cleaned.append((short_phrase, 1.0))
+                            seen.add(short_phrase.lower())
+                    # Skip this long keyword otherwise
+                    continue
+                
+                # Good length (1-4 words), add it
+                if keyword.lower() not in seen:
+                    cleaned.append((keyword, 1.0))
+                    seen.add(keyword.lower())
+            
+            return cleaned
+        
+        # Clean the keywords
+        keywords = clean_keywords(data.get("keywords", []))
+        
+        # Quality check: if we got mostly garbage (long keywords), fall back to RAKE
+        if len(keywords) < 5:
+            print("Warning: Gemini returned poor quality keywords, falling back to RAKE analyzer")
+            from .analyzer import analyze_text
+            return analyze_text(text)
+        
+        # Clean entities, actions, emotions too (remove long ones)
+        entities: List[str] = [
+            e.strip() for e in data.get("entities", [])
+            if len(e.split()) <= 4
         ]
-        entities: List[str] = data.get("entities", [])
-        actions: List[str] = data.get("actions", [])
-        emotions: List[str] = data.get("emotions", [])
+        actions: List[str] = [
+            a.strip() for a in data.get("actions", [])
+            if len(a.split()) <= 3
+        ]
+        emotions: List[str] = [
+            e.strip() for e in data.get("emotions", [])
+            if len(e.split()) <= 2
+        ]
         
         return Analysis(
             keywords=keywords,
